@@ -56,8 +56,8 @@ float humidity_readings[max_readings]    = {0};
 float rain_readings[max_readings]        = {0};
 float snow_readings[max_readings]        = {0};
 
-long SleepDuration   = 60; // Sleep time in minutes, aligned to the nearest minute boundary, so if 30 will always update at 00 or 30 past the hour
-int  WakeupHour      = 8;  // Wakeup after 07:00 to save battery power
+long SleepDuration   = 30; // Sleep time in minutes, aligned to the nearest minute boundary, so if 30 will always update at 00 or 30 past the hour
+int  WakeupHour      = 6;  // Wakeup after 07:00 to save battery power
 int  SleepHour       = 23; // Sleep  after 23:00 to save battery power
 long StartTime       = 0;
 long SleepTimer      = 0;
@@ -444,7 +444,7 @@ void DisplayForecastTextSection(int x, int y) {
 void DisplayVisiCCoverUVISection(int x, int y) {
   setFont(OpenSans12B);
   Serial.print("=========================="); Serial.println(WxConditions[0].Visibility);
-  Visibility(x + 5, y, String(WxConditions[0].Visibility) + "M");
+  if(Units == "I") Visibility(x + 5, y, String(float(WxConditions[0].Visibility)/1609.344) + "Mi"); else Visibility(x + 5, y, String(WxConditions[0].Visibility) + "M");
   CloudCover(x + 155, y, WxConditions[0].Cloudcover);
   Display_UVIndexLevel(x + 265, y, WxConditions[0].UVI);
 }
