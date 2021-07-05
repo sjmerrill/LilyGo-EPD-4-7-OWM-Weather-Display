@@ -12,7 +12,8 @@
 #include <SPI.h>                // In-built
 #include <time.h>               // In-built
 
-#include "owm_credentials.h"
+#include "enphase_credentials.h" // Enphase API Credentials
+#include "owm_credentials.h"     // OpenWeatherMap API Credentials
 #include "forecast_record.h"
 #include "lang.h"
 
@@ -327,7 +328,7 @@ void DisplayWeather() {                          // 4.7" e-paper display is 960x
   DisplayDisplayWindSection(137, 150, WxConditions[0].Winddir, WxConditions[0].Windspeed, 100);
   DisplayAstronomySection(5, 252);               // Astronomy section Sun rise/set, Moon phase and Moon icon
   DisplayMainWeatherSection(320, 110);           // Centre section of display for Location, temperature, Weather report, current Wx Symbol
-  DisplayWeatherIcon(835, 140);                  // Display weather icon scale = Large;
+  DisplayWeatherIcon(590, 145);                  // Display weather icon scale = Large;
   DisplayForecastSection(285, 220);              // 3hr forecast boxes
   DisplayGraphSection(320, 220);                 // Graphs of pressure, temperature, humidity and rain or snowfall
 }
@@ -562,6 +563,8 @@ void DisplayForecastSection(int x, int y) {
 
 void DisplayGraphSection(int x, int y) {
   int r = 0;
+  bool rainOrSnow = true;
+  int numGraphs = 4; 
   do { // Pre-load temporary arrays with with data - because C parses by reference and remember that[1] has already been converted to I units
     if (Units == "I") pressure_readings[r] = WxForecast[r].Pressure * 0.02953;   else pressure_readings[r] = WxForecast[r].Pressure;
     if (Units == "I") rain_readings[r]     = WxForecast[r].Rainfall * 0.0393701; else rain_readings[r]     = WxForecast[r].Rainfall;
@@ -570,18 +573,26 @@ void DisplayGraphSection(int x, int y) {
     humidity_readings[r]                   = WxForecast[r].Humidity;
     r++;
   } while (r < max_readings);
-  int gwidth = 175, gheight = 100;
-  int gx = (SCREEN_WIDTH - gwidth * 4) / 5 + 8;
+  if (SumOfPrecip(rain_readings, max_readings) && SumOfPrecip(snow_readings, max_readings) == 0) { //Checking if there's been any rain or snow during the max_readings period
+    rainOrSnow = false;
+    numGraphs = numGraphs-1;
+  }  
+  
+  int gwidth = (SCREEN_WIDTH-260)/numGraphs; // 200 pixels are the fixed space for the numbers and whitespace
+  int gheight = 100;
+  int gx = (SCREEN_WIDTH - gwidth * numGraphs) / (numGraphs+1) + 8; //computes to 60 with 4 graphs & gwidth = 175 / computes to 68 with 3 graphs & gwidth = 240 
   int gy = (SCREEN_HEIGHT - gheight - 30);
-  int gap = gwidth + gx;
+  int gap = gwidth + gx; //computes to 235 with 4 graphs & gwidth = 175 / computes to with 3 graphs & gwidth = 240 
   // (x,y,width,height,MinValue, MaxValue, Title, Data Array, AutoScale, ChartMode)
   DrawGraph(gx + 0 * gap, gy, gwidth, gheight, 900, 1050, Units == "M" ? TXT_PRESSURE_HPA : TXT_PRESSURE_IN, pressure_readings, max_readings, autoscale_on, barchart_off);
   DrawGraph(gx + 1 * gap, gy, gwidth, gheight, 10, 30,    Units == "M" ? TXT_TEMPERATURE_C : TXT_TEMPERATURE_F, temperature_readings, max_readings, autoscale_on, barchart_off);
   DrawGraph(gx + 2 * gap, gy, gwidth, gheight, 0, 100,   TXT_HUMIDITY_PERCENT, humidity_readings, max_readings, autoscale_on, barchart_off);
-  if (SumOfPrecip(rain_readings, max_readings) >= SumOfPrecip(snow_readings, max_readings))
-    DrawGraph(gx + 3 * gap + 5, gy, gwidth, gheight, 0, 30, Units == "M" ? TXT_RAINFALL_MM : TXT_RAINFALL_IN, rain_readings, max_readings, autoscale_on, barchart_on);
-  else
-    DrawGraph(gx + 3 * gap + 5, gy, gwidth, gheight, 0, 30, Units == "M" ? TXT_SNOWFALL_MM : TXT_SNOWFALL_IN, snow_readings, max_readings, autoscale_on, barchart_on);
+  if (rainOrSnow){ //if rain or snow - print a graph with it!
+    if (SumOfPrecip(rain_readings, max_readings) >= SumOfPrecip(snow_readings, max_readings))
+      DrawGraph(gx + 3 * gap + 5, gy, gwidth, gheight, 0, 30, Units == "M" ? TXT_RAINFALL_MM : TXT_RAINFALL_IN, rain_readings, max_readings, autoscale_on, barchart_on);
+    else
+      DrawGraph(gx + 3 * gap + 5, gy, gwidth, gheight, 0, 30, Units == "M" ? TXT_SNOWFALL_MM : TXT_SNOWFALL_IN, snow_readings, max_readings, autoscale_on, barchart_on);
+  };
 }
 
 void DisplayConditionsSection(int x, int y, String IconName, bool IconSize) {
