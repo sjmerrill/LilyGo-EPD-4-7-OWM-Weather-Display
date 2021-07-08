@@ -78,6 +78,126 @@ long Delta           = 30; // ESP32 rtc speed compensation, prevents display at 
 GFXfont  currentFont;
 uint8_t *framebuffer;
 
+//#################### FUNCTION DECLARATIONS #########################################
+
+void BeginSleep();
+boolean SetupTime();
+uint8_t StartWiFi();
+void StopWiFi();
+void InitialiseSystem();
+void loop();
+void setup();
+void Convert_Readings_to_Imperial();
+bool DecodeWeather(WiFiClient& json, String Type);
+String ConvertUnixTime(int unix_time);
+bool obtainWeatherData(WiFiClient & client, const String & RequestType);
+float mm_to_inches(float value_mm);
+float hPa_to_inHg(float value_hPa);
+int JulianDate(int d, int m, int y);
+float SumOfPrecip(float DataArray[], int readings);
+String TitleCase(String text);
+void DisplayWeather();
+void DisplayGeneralInfoSection();
+void DisplayWeatherIcon(int x, int y);
+void DisplayMainWeatherSection(int x, int y);
+void DisplayDisplayWindSection(int x, int y, float angle, float windspeed, int Cradius);
+String WindDegToOrdinalDirection(float winddirection);
+void DisplayTempHumiPressSection(int x, int y);
+void DisplayForecastTextSection(int x, int y);
+void DisplayVisiCCoverUVISection(int x, int y);
+void Display_UVIndexLevel(int x, int y, float UVI);
+void DisplayForecastWeather(int x, int y, int index, int fwidth);
+double NormalizedMoonPhase(int d, int m, int y);
+void DisplayAstronomySection(int x, int y);
+void DrawMoon(int x, int y, int diameter, int dd, int mm, int yy, String hemisphere);
+String MoonPhase(int d, int m, int y, String hemisphere);
+void DisplayForecastSection(int x, int y);
+void DisplayGraphSection(int x, int y);
+void DisplayConditionsSection(int x, int y, String IconName, bool IconSize);
+void arrow(int x, int y, int asize, float aangle, int pwidth, int plength);
+void DrawSegment(int x, int y, int o1, int o2, int o3, int o4, int o11, int o12, int o13, int o14);
+void DrawPressureAndTrend(int x, int y, float pressure, String slope);
+void DisplayStatusSection(int x, int y, int rssi);
+void DrawRSSI(int x, int y, int rssi);
+boolean UpdateLocalTime();
+void DrawBattery(int x, int y);
+void addcloud(int x, int y, int scale, int linesize);
+void addrain(int x, int y, int scale, bool IconSize);
+void addsnow(int x, int y, int scale, bool IconSize);
+void addtstorm(int x, int y, int scale);
+void addsun(int x, int y, int scale, bool IconSize);
+void addfog(int x, int y, int scale, int linesize, bool IconSize);
+void DrawAngledLine(int x, int y, int x1, int y1, int size, int color);
+void ClearSky(int x, int y, bool IconSize, String IconName);
+void BrokenClouds(int x, int y, bool IconSize, String IconName);
+void FewClouds(int x, int y, bool IconSize, String IconName);
+void ScatteredClouds(int x, int y, bool IconSize, String IconName);
+void Rain(int x, int y, bool IconSize, String IconName);
+void ChanceRain(int x, int y, bool IconSize, String IconName);
+void Thunderstorms(int x, int y, bool IconSize, String IconName);
+void Snow(int x, int y, bool IconSize, String IconName);
+void Mist(int x, int y, bool IconSize, String IconName);
+void CloudCover(int x, int y, int CloudCover);
+void Visibility(int x, int y, String Visibility);
+void addmoon(int x, int y, bool IconSize);
+void Nodata(int x, int y, bool IconSize, String IconName);
+void DrawMoonImage(int x, int y);
+void DrawSunriseImage(int x, int y);
+void DrawSunsetImage(int x, int y);
+void DrawUVI(int x, int y);
+void DrawGraph(int x_pos, int y_pos, int gwidth, int gheight, float Y1Min, float Y1Max, String title, float DataArray[], int readings, boolean auto_scale, boolean barchart_mode);
+void drawString(int x, int y, String text, alignment align);
+void fillCircle(int x, int y, int r, uint8_t color);
+void drawFastHLine(int16_t x0, int16_t y0, int length, uint16_t color);
+void drawFastVLine(int16_t x0, int16_t y0, int length, uint16_t color);
+void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
+void drawCircle(int x0, int y0, int r, uint8_t color);
+void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void drawPixel(int x, int y, uint8_t color);
+void setFont(GFXfont const & font);
+void edp_update();
+
+// #################################### MAIN LOOPS ###########################################
+
+void setup() {
+  InitialiseSystem();
+  if (StartWiFi() == WL_CONNECTED && SetupTime() == true) {
+    bool WakeUp = false;
+    if (WakeupHour > SleepHour)
+      WakeUp = (CurrentHour >= WakeupHour || CurrentHour <= SleepHour);
+    else
+      WakeUp = (CurrentHour >= WakeupHour && CurrentHour <= SleepHour);
+    if (WakeUp) {
+      byte Attempts = 1;
+      bool RxWeather  = false;
+      bool RxForecast = false;
+      WiFiClient client;   // wifi client object
+      while ((RxWeather == false || RxForecast == false) && Attempts <= 2) { // Try up-to 2 time for Weather and Forecast data
+        if (RxWeather  == false) RxWeather  = obtainWeatherData(client, "onecall");
+        if (RxForecast == false) RxForecast = obtainWeatherData(client, "forecast");
+        Attempts++;
+      }
+      Serial.println("Received all weather data...");
+      if (RxWeather && RxForecast) { // Only if received both Weather or Forecast proceed
+        StopWiFi();         // Reduces power consumption
+        epd_poweron();      // Switch on EPD display
+        epd_clear();        // Clear the screen
+        DisplayWeather();   // Display the weather data
+        edp_update();       // Update the display to show the information
+        epd_poweroff_all(); // Switch off all power to EPD
+      }
+    }
+  }
+  BeginSleep();
+}
+
+void loop() {
+  // Nothing to do here
+}
+
+// #################################### FUNCTION DEFINITIONS ################################
+
 void BeginSleep() {
   epd_poweroff_all();
   UpdateLocalTime();
@@ -134,42 +254,6 @@ void InitialiseSystem() {
   framebuffer = (uint8_t *)ps_calloc(sizeof(uint8_t), EPD_WIDTH * EPD_HEIGHT / 2);
   if (!framebuffer) Serial.println("Memory alloc failed!");
   memset(framebuffer, 0xFF, EPD_WIDTH * EPD_HEIGHT / 2);
-}
-
-void loop() {
-  // Nothing to do here
-}
-
-void setup() {
-  InitialiseSystem();
-  if (StartWiFi() == WL_CONNECTED && SetupTime() == true) {
-    bool WakeUp = false;
-    if (WakeupHour > SleepHour)
-      WakeUp = (CurrentHour >= WakeupHour || CurrentHour <= SleepHour);
-    else
-      WakeUp = (CurrentHour >= WakeupHour && CurrentHour <= SleepHour);
-    if (WakeUp) {
-      byte Attempts = 1;
-      bool RxWeather  = false;
-      bool RxForecast = false;
-      WiFiClient client;   // wifi client object
-      while ((RxWeather == false || RxForecast == false) && Attempts <= 2) { // Try up-to 2 time for Weather and Forecast data
-        if (RxWeather  == false) RxWeather  = obtainWeatherData(client, "onecall");
-        if (RxForecast == false) RxForecast = obtainWeatherData(client, "forecast");
-        Attempts++;
-      }
-      Serial.println("Received all weather data...");
-      if (RxWeather && RxForecast) { // Only if received both Weather or Forecast proceed
-        StopWiFi();         // Reduces power consumption
-        epd_poweron();      // Switch on EPD display
-        epd_clear();        // Clear the screen
-        DisplayWeather();   // Display the weather data
-        edp_update();       // Update the display to show the information
-        epd_poweroff_all(); // Switch off all power to EPD
-      }
-    }
-  }
-  BeginSleep();
 }
 
 void Convert_Readings_to_Imperial() { // Only the first 3-hours are used
