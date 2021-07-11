@@ -4,7 +4,6 @@
 #include "freertos/task.h"      // In-built
 #include "epd_driver.h"         // https://github.com/Xinyuan-LilyGO/LilyGo-EPD47
 #include "esp_adc_cal.h"        // In-built
-
 #include <ArduinoJson.h>        // https://github.com/bblanchon/ArduinoJson
 #include <HTTPClient.h>         // In-built
 
@@ -154,6 +153,8 @@ void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
 void drawCircle(int x0, int y0, int r, uint8_t color);
 void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
+                  int16_t x2, int16_t y2, uint16_t color);
 void drawPixel(int x, int y, uint8_t color);
 void setFont(GFXfont const & font);
 void edp_update();
@@ -310,7 +311,7 @@ bool DecodeWeather(WiFiClient& json, String Type) {
       WxForecast[r].High              = list[r]["main"]["temp_max"].as<float>();   Serial.println("THig: " + String(WxForecast[r].High));
       WxForecast[r].Pressure          = list[r]["main"]["pressure"].as<float>();   Serial.println("Pres: " + String(WxForecast[r].Pressure));
       WxForecast[r].Humidity          = list[r]["main"]["humidity"].as<float>();   Serial.println("Humi: " + String(WxForecast[r].Humidity));
-      WxForecast[r].Icon              = list[r]["weather"][0]["icon"].as<char*>(); Serial.println("Icon: " + String(WxForecast[r].Icon));
+      WxForecast[r].Icon              = list[r]["weather"][0]["icon"].as<const char*>(); Serial.println("Icon: " + String(WxForecast[r].Icon));
       WxForecast[r].Rainfall          = list[r]["rain"]["3h"].as<float>();         Serial.println("Rain: " + String(WxForecast[r].Rainfall));
       WxForecast[r].Snowfall          = list[r]["snow"]["3h"].as<float>();         Serial.println("Snow: " + String(WxForecast[r].Snowfall));
       if (r < 8) { // Check next 3 x 8 Hours = 1 day
