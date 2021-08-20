@@ -14,7 +14,8 @@
 
 #include "enphase_credentials.h" // Enphase API Credentials
 #include "owm_credentials.h"     // OpenWeatherMap API Credentials
-#include "forecast_record.h"
+#include "forecast_record.h"     // Forcase Record Object Type
+#include "solar_data.h"          // Solar Data Object Types 
 #include "lang.h"
 
 #define SCREEN_WIDTH   EPD_WIDTH
@@ -50,6 +51,7 @@ int     wifi_signal, CurrentHour = 0, CurrentMin = 0, CurrentSec = 0, EventCnt =
 
 Forecast_record_type  WxConditions[1];
 Forecast_record_type  WxForecast[max_readings];
+Solar_summary_record_type SolarSummary;
 
 float pressure_readings[max_readings]    = {0};
 float temperature_readings[max_readings] = {0};
@@ -152,10 +154,12 @@ void setup() {
       byte Attempts = 1;
       bool RxWeather  = false;
       bool RxForecast = false;
+      bool RxSolarInfo = false;
       WiFiClient client;   // wifi client object
-      while ((RxWeather == false || RxForecast == false) && Attempts <= 2) { // Try up-to 2 time for Weather and Forecast data
+      while ((RxWeather == false || RxForecast == false || RxSolarInfo == false) && Attempts <= 2) { // Try up-to 2 time for Weather and Forecast data
         if (RxWeather  == false) RxWeather  = obtainWeatherData(client, "onecall");
         if (RxForecast == false) RxForecast = obtainWeatherData(client, "forecast");
+        RxSolarInfo = obtainSolarInfo(client, "summary");
         Attempts++;
       }
       Serial.println("Received all weather data...");
@@ -179,7 +183,7 @@ void Convert_Readings_to_Imperial() { // Only the first 3-hours are used
 }
 
 bool DecodeWeather(WiFiClient& json, String Type) {
-  Serial.print(F("\nCreating object...and "));
+  Serial.print(F("\nCreating Weather object...and "));
   DynamicJsonDocument doc(64 * 1024);                      // allocate the JsonDocument
   DeserializationError error = deserializeJson(doc, json); // Deserialize the JSON document
   if (error) {                                             // Test if parsing succeeds.
@@ -268,6 +272,7 @@ bool obtainWeatherData(WiFiClient & client, const String & RequestType) {
   //api.openweathermap.org/data/2.5/RequestType?lat={lat}&lon={lon}&appid={API key}
   String uri = "/data/2.5/" + RequestType + "?lat=" + Latitude + "&lon=" + Longitude + "&appid=" + apikey + "&mode=json&units=" + units + "&lang=" + Language;
   if (RequestType == "onecall") uri += "&exclude=minutely,hourly,alerts,daily";
+  http.useHTTP10(true); // use http 1.0 for ArduinoJson Stream Compatibility
   http.begin(client, server, 80, uri); //http.begin(uri,test_root_ca); //HTTPS example connection
   int httpCode = http.GET();
   if (httpCode == HTTP_CODE_OK) {
@@ -282,6 +287,63 @@ bool obtainWeatherData(WiFiClient & client, const String & RequestType) {
     return false;
   }
   http.end();
+  return true;
+}
+
+bool obtainSolarInfo(WiFiClient & client, const String & RequestType) {
+  client.stop(); // close connection before sending a new request
+  HTTPClient http;
+  //https://api.enphaseenergy.com/api/v2/systems/{{system_id}}/{{RequestType}}?key={{enphase_api_key}}&user_id={{enphase_user_id}}&datetime_format=iso8601
+  String uri = "https://api.enphaseenergy.com/api/v2/systems/" + enphase_system_id + "/" + RequestType + "?key=" + enphase_api_key + "&user_id=" + enphase_user_id + "&datetime_format=iso8601";
+  Serial.printf("obtainSolarInfo: Making a request of type: %s \n", RequestType.c_str());
+  Serial.printf("obtainSolarInfo: attempting to access uri: %s\n", uri.c_str());
+  http.useHTTP10(true); // use http 1.0 for ArduinoJson Stream Compatibility
+  http.begin(uri,enphase_root_ca); //http.begin(uri,test_root_ca); //HTTPS example connection
+  int httpCode = http.GET();
+  if (httpCode == HTTP_CODE_OK) {
+    // Serial.printf("obtainSolarInfo - Recieved: %s \n", http.getString().c_str());
+    // Serial.printf("\nobtainSolarInfo: End of Response\n");
+    if (!decodeSolar(http.getStream(), RequestType)) return false; //from weather function copy
+    client.stop();
+  }
+  else
+  {
+    Serial.printf("obtainSolarInfo: connection failed, error: \n %s\n", http.errorToString(httpCode).c_str());
+    Serial.printf("\nEnd of obtainSolarInfo Error Report\n");
+    client.stop();
+    http.end();
+    return false;
+  }
+  http.end();
+  return true;
+}
+
+bool decodeSolar(WiFiClient &json, String Type){
+  Serial.print(F("\nCreating Solar object...and "));
+  DynamicJsonDocument doc(512);                      // allocate the JsonDocument
+  DeserializationError error = deserializeJson(doc, json); // Deserialize the JSON document
+  if (error) {                                             // Test if parsing succeeds.
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.c_str());
+    return false;
+  }
+  // convert it to a JsonObject
+  JsonObject root = doc.as<JsonObject>();
+  Serial.println(" Decoding " + Type + " data");
+  if (Type == "summary"){
+    SolarSummary.SystemID = doc["system_id"];                                   Serial.println("Solar System ID: " + String(SolarSummary.SystemID));
+    SolarSummary.Modules = doc["modules"];                                      Serial.println("Number of Modules: " + String(SolarSummary.Modules));
+    SolarSummary.SizeW = doc["size_w"];                                         Serial.println("Array Size (W): "+ String(SolarSummary.SizeW));
+    SolarSummary.CurrentPower = doc["current_power"];                           Serial.println("current_power: "+ String(SolarSummary.CurrentPower));
+    SolarSummary.EnergyToday = doc["energy_today"];                             Serial.println("energy_today: "+ String(SolarSummary.EnergyToday));
+    SolarSummary.EnergyLifetime = doc["energy_lifetime"];                       Serial.println("energy_lifetime: "+ String(SolarSummary.EnergyLifetime));
+    SolarSummary.SummaryDate = doc["summary_date"].as<char*>();                 Serial.println("summary_date: "+ String(SolarSummary.SummaryDate));
+    SolarSummary.Source = doc["source"].as<char*>();                            Serial.println("source: "+ String(SolarSummary.Source));
+    SolarSummary.Status = doc["status"].as<char*>();                            Serial.println("status: "+ String(SolarSummary.Status));
+    SolarSummary.OperationalAt = doc["operational_at"].as<char*>();             Serial.println("operational_at: "+ String(SolarSummary.OperationalAt));
+    SolarSummary.LastReportAt = doc["last_report_at"].as<char*>();              Serial.println("last_report_at: "+ String(SolarSummary.LastReportAt));
+    SolarSummary.LastIntervalEndAt = doc["last_interval_end_at"].as<char*>();   Serial.println("last_interval_end_at: "+ String(SolarSummary.LastIntervalEndAt));
+  }
   return true;
 }
 
